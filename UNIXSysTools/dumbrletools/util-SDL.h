@@ -3,7 +3,6 @@
  *
  *      Date:   24/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:     2271 3603
  *
  * Prototypes for utility functions that require SDL libraries.
  */

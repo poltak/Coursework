@@ -3,7 +3,6 @@
  *
  *  	Date: 	24/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  *
  * Contains utility functions for processing DUMBRLEv1 file frames and channels for display with
  * an SDL_Surface.

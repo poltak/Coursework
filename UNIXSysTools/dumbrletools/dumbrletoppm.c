@@ -3,7 +3,6 @@
  *
  *  	Date: 	24/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  *
  * Converts DUMBRLEv1 files into number of PPM files for each frame contained in the dumbrle.
  */

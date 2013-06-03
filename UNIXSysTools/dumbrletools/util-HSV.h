@@ -3,7 +3,6 @@
  *
  *  	Date: 	27/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  *
  * Extensively modifies algorithms originally written by Jef Poskanzer for libppm functions.
  * More details and permission notice in util-HSV.c.

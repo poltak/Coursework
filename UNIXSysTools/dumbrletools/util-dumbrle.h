@@ -3,7 +3,6 @@
  *
  *  	Date: 	24/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  */
 
 #define BITS_PER_PIXEL  32

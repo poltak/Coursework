@@ -3,7 +3,6 @@
  *
  *  	Date: 	26/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  *
  * Plays a DUMBRLEv1 file, providing support for frame delay, brightness, contrast and saturation
  * options.

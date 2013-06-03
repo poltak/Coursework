@@ -3,7 +3,6 @@
  *
  *  	Date: 	24/04/2013
  *      Author: Jonathan Poltak Samosir
- *      ID:		2271 3603
  *
  * Displays the first frame of a specified DUMBRLEv1 file for specified amount of seconds.
  */
