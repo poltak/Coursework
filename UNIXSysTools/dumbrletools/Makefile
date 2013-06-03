@@ -1,0 +1,59 @@
+#
+# Makefile
+#
+#		Date:	24/04/2013
+#		Author:	Jonathan Poltak Samosir
+#		ID:		2271 3603
+#
+
+CC=gcc
+CFLAGS=-Wall -g
+LIB1=-lSDL
+LIB2=-lnetpbm
+LIB3=-lm			# Maths libs for minor use in converting RGB to HSV.
+
+UTIL_OBJS=util.o
+UTIL_DEPS=util.h util-SDL.h
+UTIL_DUMBRLE_OBJS=util-dumbrle.o $(UTIL_OBJS)
+UTIL_DUMBRLE_DEPS=util-dumbrle.h $(UTIL_DEPS)
+UTIL_HSV_OBJS=util-HSV.o
+UTIL_HSV_DEPS=util-HSV.h
+
+DUMBRLETOPPM_OBJS=dumbrletoppm.o $(UTIL_OBJS)
+DUMBRLETOPPM_DEPS=dumbrletoppm.h util.h
+DUMBRLETOPPM_EXE=dumbrletoppm
+
+FIRSTFRAMEVIEW_OBJS=firstframeview.o $(UTIL_DUMBRLE_OBJS)
+FIRSTFRAMEVIEW_DEPS=firstframeview.h $(UTIL_DUMBRLE_DEPS)
+FIRSTFRAMEVIEW_EXE=firstframeview
+
+DUMBRLEPLAYER_OBJS=dumbrleplayer.o $(UTIL_DUMBRLE_OBJS)
+DUMBRLEPLAYER_DEPS=dumbrleplayer.h $(UTIL_DUMBRLE_DEPS)
+DUMBRLEPLAYER_EXE=dumbrleplayer
+
+SMARTRLEPLAYER_OBJS=smartrleplayer.o $(UTIL_DUMBRLE_OBJS) $(UTIL_HSV_OBJS)
+SMARTRLEPLAYER_DEPS=smartrleplayer.h $(UTIL_DUMBRLE_DEPS) $(UTIL_HSV_DEPS)
+SMARTRLEPLAYER_EXE=smartrleplayer
+
+EXES=$(DUMBRLETOPPM_EXE) $(FIRSTFRAMEVIEW_EXE) $(DUMBRLEPLAYER_EXE) $(SMARTRLEPLAYER_EXE)
+
+all: $(EXES)
+
+dumbrletoppm: $(DUMBRLETOPPM_OBJS) $(DUMBRLETOPPM_DEPS)
+	$(CC) $(CFLAGS) -o $(DUMBRLETOPPM_EXE) $(DUMBRLETOPPM_OBJS) $(LIB2)
+
+firstframeview: $(FIRSTFRAMEVIEW_OBJS) $(FIRSTFRAMEVIEW_DEPS)
+	$(CC) $(CFLAGS) -o $(FIRSTFRAMEVIEW_EXE) $(FIRSTFRAMEVIEW_OBJS) $(LIB1)
+
+dumbrleplayer: $(DUMBRLEPLAYER_OBJS) $(DUMBRLEPLAYER_DEPS)
+	$(CC) $(CFLAGS) -o $(DUMBRLEPLAYER_EXE) $(DUMBRLEPLAYER_OBJS) $(LIB1)
+
+smartrleplayer: $(SMARTRLEPLAYER_OBJS) $(SMARTRLEPLAYER_DEPS)
+	$(CC) $(CFLAGS) -o $(SMARTRLEPLAYER_EXE) $(SMARTRLEPLAYER_OBJS) $(LIB1) $(LIB3)
+
+clean:
+	rm -fv *.o
+
+clobber:
+	make clean
+	rm -fv $(EXES)

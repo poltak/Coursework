@@ -1,17 +1,4 @@
-#include <stdio.h>
-#include <string.h>         /* for string functiosn */
-#include <stdlib.h>         /* used for mem allocation for given env variables */
-#include <signal.h>         /* only used for SIGTERM resolution */
-#include <unistd.h>         /* process management */
-#include <sys/stat.h>       /* access to stat syscall for checking if directory exists in system */
-
-/* global constants */
-#define DELIMITER   " "
-#define BYTE_LIM    512
-#define OOM         1
-#define TRUE        1
-#define FALSE       0
-#define CHILD_PID   0
+#include "fsh.h"
 
 /* global environment variables */
 char *user;
@@ -32,31 +19,15 @@ char *cmd_arr[] = {
     "cd"
 };
 
-/* function declarations */
-void cmd_handler(int cmd, char *arg);
-void set_env_vars(void);
-void trim_line_break(char *str);
-
-void run_clr(void);
-void run_dir(char *path);
-void run_environ(void);
-void run_echo(char *str);
-void run_help(void);
-void run_pause(void);
-void run_quit(void);
-void run_cd(char *path);
-
-
 int main(int argc, char *argv[])
 {
     /* allocate memory to environment variables; give them limit of 512 bytes inclusive of '\0' at end of string */
-    user = (char *) malloc(BYTE_LIM);
-    pwd = (char *) malloc(BYTE_LIM);
-    home = (char *) malloc(BYTE_LIM);
+    user  = (char *) malloc(BYTE_LIM);
+    pwd   = (char *) malloc(BYTE_LIM);
+    home  = (char *) malloc(BYTE_LIM);
     shell = (char *) malloc(BYTE_LIM);
 
     int return_val = run_shell();
-
 
     if (return_val == EOF)
     {
@@ -93,9 +64,7 @@ int run_shell()
     /* allocates appropriate mem to command, limiting user's command and setting up temporary container string to split */
     command = (char *) malloc(nbytes);
     commandtmp = (char *) malloc(sizeof(command));
-    if (commandtmp == NULL)     /* if no space left to allocate (highly unlikely...) */
-        return OOM;
-
+    if (commandtmp == NULL)     return OOM;     /* if no space left to allocate (highly unlikely...) */
 
     /* the main loop that powers the shell */
     while (run_signal != EOF)
@@ -118,18 +87,18 @@ int run_shell()
         arg_token = strtok(NULL, DELIMITER);
 
         /* had problems with '\n' value being put into strings, which messed up comparisons later; this takes them out if they exist */
-        if (arg_token == NULL)   /* if no argument */
-            trim_line_break(cmd_token);
-        else
-            trim_line_break(arg_token);
+        if (arg_token == NULL)  trim_line_break(cmd_token);   /* if no argument */
+        else                    trim_line_break(arg_token);
 
         /* compares entered command with all valid commands, allowing handler to execute command if valid */
         for (i = 0; i < cmd_arr_length; i++)
+        {
             if (strcmp(cmd_token, cmd_arr[i]) == 0)
             {
                 invalid_cmd = FALSE;
                 cmd_handler(i, arg_token);
             }
+        }
 
         /* don't print error message if user entered valid command or if they didn't enter anything */
         if (invalid_cmd && strlen(cmd_token) > 1)
@@ -157,8 +126,7 @@ void set_env_vars()
 void trim_line_break(char *str)
 {
     int last = strlen(str) -1;
-    if (str[last] == '\n')
-        str[last] = '\0';
+    if (str[last] == '\n')  str[last] = '\0';
 }
 
 void cmd_handler(int cmd, char *arg)
@@ -169,9 +137,8 @@ void cmd_handler(int cmd, char *arg)
 
         if (pid > CHILD_PID)        /* parent process wait for child to finish before exiting function and going back to prompt */
         {
-            wait(pid);
-        }
-        else if (pid == CHILD_PID)  /* forked child process runs entered command */
+            wait(&pid);
+        } else if (pid == CHILD_PID)  /* forked child process runs entered command */
         {
             switch (cmd)
             {
@@ -196,14 +163,12 @@ void cmd_handler(int cmd, char *arg)
                 default:
                     printf("Congratulations! You've broken my code.");  /* I really don't think it's possible to get here... */
             }
-        }
-        else
+        } else
         {
             fprintf(stderr, "Failed to fork process. Fatal error, exiting program.\n");
-            exit(-1);
+            exit(1);
         }
-    }
-    else    /* handles last commands: because of the way I've implemented the execution of the shell, it would be very inconvenient to handle them in a child process (without using shared memory) */
+    } else    /* handles last commands: because of the way I've implemented the execution of the shell, it would be very inconvenient to handle them in a child process (without using shared memory) */
     {
         switch (cmd)
         {
@@ -219,29 +184,21 @@ void cmd_handler(int cmd, char *arg)
     }
 }
 
-void run_clr()
-{
-    execlp("/usr/bin/clear", "clear", NULL);
-}
+void run_clr() { execlp("/usr/bin/clear", "clear", NULL); }
 
 /* allows calling with or without argument specified; without arg just lists pwd directory */
 void run_dir(char *path)
 {
-    if (path == NULL)
-        execlp("/usr/bin/dir", "dir", "-hal", pwd, NULL);
+    if (path == NULL)   execlp("/usr/bin/dir", "dir", "-hal", pwd, NULL);
     execlp("/usr/bin/dir", "dir", "-hal", path, NULL);
 }
 
-void run_echo(char *str)
-{
-    execlp("/bin/echo", "echo", str, NULL);
-}
+void run_echo(char *str) { execlp("/bin/echo", "echo", str, NULL); }
 
 /* could have just executed system "printenv" command but it would print out environment variables not applicable to this shell; therefore I think this will suffice */
 void run_environ()
 {
     printf("SHELL=%s\nUSER=%s\nHOME=%s\nPWD=%s\n", shell, user, home, pwd);
-
     kill(getpid(), SIGTERM);
 }
 
@@ -265,10 +222,7 @@ void run_pause()
 }
 
 /* the way I have my while loop set up in run_shell(), this is the most simple way of quitting the program without outright killing the process; no real use for fork here */
-void run_quit()
-{
-    run_signal = EOF;
-}
+void run_quit() { run_signal = EOF; }
 
 /*
  *  I spent hours on this one. Because of the way I've implemented PWD as an env variable, forking a child process and changing
@@ -286,23 +240,19 @@ void run_cd(char *path)
     {
         printf("Current directory is: %s\n", pwd);
         return;
-    }
-    else if (path[0] != '/')    /* checks and handles if user enters relative directory path */
+    } else if (path[0] != '/')    /* checks and handles if user enters relative directory path */
     {
         printf("Please enter absolute directory path.\n");
         return;
-    }
-    else if (is_mult_slash(path))  /* checks for multiple /'s as it ruins my implementation of PWD */
+    } else if (is_mult_slash(path))  /* checks for multiple /'s as it ruins my implementation of PWD */
     {
         printf("Please don't enter multiple '/' characters.\n");
         return;
     }
 
     /* checks if directory specified in path exists in system using stat syscall */
-    if (stat(path, &st) == 0)
-        strcpy(pwd, path);  /* no need to reallocate memory as path's length must be < pwd's length due to the string split in run_shell() (as they both start with 512 byte limit) */
-    else
-        fprintf(stderr, "%s: %s: %s: No such directory or is a file.\n", shell, cmd_arr[0], path);
+    if (stat(path, &st) == 0) strcpy(pwd, path);
+    else    fprintf(stderr, "%s: %s: %s: No such directory or is a file.\n", shell, cmd_arr[0], path);
 }
 
 /*
@@ -316,12 +266,9 @@ int is_mult_slash(char* str)
     int i = 0;
     while (str[i] != '\0')
     {
-        if (str[i] == '/' && slash == FALSE)
-            slash = TRUE;
-        else if (str[i] == '/' && slash == TRUE)   /* if there is any double slash found then return */
-            return FALSE;
-        else                                        /* if there is no double slash so far */
-            slash = FALSE;
+        if (str[i] == '/' && slash == FALSE)        slash = TRUE;
+        else if (str[i] == '/' && slash == TRUE)    return FALSE;   /* if there is any double slash found then return */
+        else                                        slash = FALSE;  /* if there is no double slash so far */
         i++;
     }
 }

@@ -1,0 +1,367 @@
+#!/usr/bin/perl -w
+#
+#   Name:   Jonathan Poltak Samosir
+#   ID:     2271 3603
+#   Email:  <jpsam3@student.monash.edu>
+#   Date:   2012-05-31
+#
+
+use strict;
+use warnings;
+use v5.14;
+use File::Copy      qw(copy);                       # For copying files between directories.
+use File::Basename  qw(fileparse);                  # For file path parsing.
+use File::Spec      qw(abs2rel rel2abs no_upwards); # For various path processing functions.
+
+
+# # # Start of main # # #
+
+die "usage: $0 [-d] [old backup path] <source dir> <destination dir>\n" if $#ARGV < 1 or $#ARGV > 3 or $#ARGV == 2;
+
+# Get absolute paths to args.
+($main::src_dir, $main::dst_dir) = (File::Spec->rel2abs($ARGV[$#ARGV-1]), File::Spec->rel2abs($ARGV[$#ARGV]));
+
+# Check to make sure specified source directory exists.
+-d $main::src_dir or die "$0: Cannot find directory: $main::src_dir\n";
+
+
+# Make destination directory (if needed) and 'restore.sh' file.
+`mkdir -p $main::dst_dir` unless -d $main::dst_dir;
+$main::restore_script = $main::dst_dir.'/restore.sh';
+init_restore_script();
+
+
+# Evaluate user config file and create reference to hash containing user defined extensions.
+$main::user_extensions = eval_config($ENV{"HOME"}."/.smart-backup");
+# Push all user defined extensions onto $special_extensions array, containing all valid extensions.
+@main::special_extensions = qw(.ppm .wav);
+push @main::special_extensions, keys %{$main::user_extensions};
+
+
+# Check arg count, to see if we're in differential mode or standard backup mode and call relevant copy subroutine.
+if ($#ARGV == 3 && $ARGV[0] eq '-d')    # Differential mode.
+{
+    $main::diff_dir = File::Spec->rel2abs($ARGV[1]);
+
+    # Check to make sure the old backup ($diff_dir) exists.
+    if (! -d $main::diff_dir)
+    {
+        `rm -rf $main::dst_dir`;    # Remove dst_dir and restore.sh before dying.
+        die "$0: Cannot find directory: $main::diff_dir\n";
+    }
+
+    # Recursively traverse and compress/copy new/modified files.
+    diff_mode_copy($main::src_dir, $main::dst_dir, $main::diff_dir);
+} elsif ($#ARGV == 1)                   # Normal mode.
+{
+    # Recursively traverse and compress/copy $src_dir.
+    norm_mode_copy($main::src_dir, $main::dst_dir);
+} else  # Incorrect command usage.
+{
+    `rm -rf $main::dst_dir`;    # Remove dst_dir and restore.sh before dying.
+    die "usage: $0 [-d] [old backup path] <source dir> <destination dir>\n";
+}
+
+
+# Write final parts of 'restore.sh'.
+finalise_restore_script();
+
+# Print success message for user.
+say "Backup to '$main::dst_dir' complete.";
+
+# # # End of main # # #
+
+
+
+
+
+# Traverses through the directories doing a differential backup, copying on those files that have been modified since
+# the last backup (path in arg2). Based-off logic originally written for Stage 1 (still in norm_mode_copy() sub).
+
+# As per Robert's post on moodle, it ignores compressed files (each have '.smrtbak' extension appended, so we can easily
+# find out which have been compressed) and only works for uncompressed files:
+# http://moodle.vle.monash.edu/mod/forum/discuss.php?d=243005
+#
+# arg0: Path to source directory to copy from.
+# arg1: Path to destination directory to copy to.
+# arg2: Path to old backup directory to diff source directory against.
+sub diff_mode_copy
+{
+    my ($src_path, $dst_path, $diff_path) = ($_[0], $_[1], $_[2]);
+
+    # Append forward slash to paths if left off.
+    $src_path   .= '/' if $src_path  !~ /\/$/;
+    $dst_path   .= '/' if $dst_path  !~ /\/$/;
+    $diff_path  .= '/' if $diff_path !~ /\/$/;
+
+    # Get contents of directories.
+    opendir DIR, $src_path
+        or die "Cannot open directory: $src_path\n";
+    my @dir_contents = File::Spec->no_upwards(readdir DIR);
+    closedir DIR;
+
+    opendir DIR, $diff_path
+        or die "Cannot open directory: $diff_path\n";
+    my @diff_contents = File::Spec->no_upwards(readdir DIR);
+    closedir DIR;
+
+    # Iterate each file in the directories and compare them.
+    foreach my $file (@dir_contents)
+    {
+        my ($found_flag, $new_file_flag, $file_modified_flag);
+
+        # Compare $file against each file from the last backup.
+        foreach my $diff_file (@diff_contents)
+        {
+            if ($file eq $diff_file)
+            {
+                # If the files have same name and the original file has been modified since last backup.
+                my ($file_mtime, $diff_file_mtime) = ((stat($src_path.$file))[9], (stat($diff_path.$diff_file))[9]);
+                if ($file_mtime > $diff_file_mtime) { $file_modified_flag = 1; }# Flag for copying as it's been modified.
+
+                $found_flag = 1;    # Flag that we've found $file in $diff_path.
+                last;               # Break out of inner loop, as there's not going to be another file with same name.
+            }
+
+            # This part's messy, but essentially it lets compressed files be ignored (by checking if they have '.smrtbak'
+            # extension and comparing the two file's basenames).
+            #   Take off '.smrtbak' extension.
+            (my $diff_basename, $_, my $diff_ext)   = File::Basename::fileparse($diff_path.$diff_file, qw(.smrtbak));
+            #   Take off standard file extension (such as '.png').
+            ($diff_basename, $_, $_) = File::Basename::fileparse($diff_path.$diff_basename, @main::special_extensions);
+
+            if ($diff_ext eq qw(.smrtbak))  # If $diff_file is compressed file (has '.smrtbak' extension).
+            {
+                (my $file_basename, $_, $_) = File::Basename::fileparse($src_path.$file, @main::special_extensions);
+                if ($diff_basename =~ /^$file_basename/)   # If they share the same basenames.
+                {
+                    $found_flag = 1; # Flag that it's been found, so as to not copy it (essentially ignores it).
+                    last;            # Break out of inner loop, as there's not going to be another file with same name.
+                }
+            }
+        }
+
+        # Skip to the next file if current hasn't been modified or isn't new.
+        next if (!$file_modified_flag && $found_flag);
+
+        # Do appropriate option given the file type (this part can only be reached if current file has been modified or
+        # is new!).
+        if    ( -l $src_path.$file) { warn "warning: symbolic link ignored: $file\n";   }   # file is a symlink
+        elsif (!-r $src_path.$file) { warn "warning: unreadable file ignored: $file\n"; }   # file is unreadable
+        elsif ( -f $src_path.$file) { handle_file_type($src_path.$file, $dst_path);     }   # file is normal file
+        else       # file is directory
+        {
+            mkdir $dst_path.$file;
+            my $relative_path = File::Spec->abs2rel($src_path.$file, $main::src_dir);
+
+            # Add restore command for this directory to 'restore.sh'.
+            say RESTORE_SCRIPT  "if [[ ! -d \$DST_DIR/$relative_path ]]; then mkdir \$DST_DIR/$relative_path; fi"
+                or die "$0: Cannot write to file: $main::restore_script\n";
+            # Recursively traverse + copy/compress this directory and its contents.
+            diff_mode_copy($src_path.$file, $dst_path.$file, $diff_path.$file);
+        }
+    }
+}
+
+# Performs a recursive depth-first traversal of a given directory, passing control to handle_file_type() when standard
+# file encountered, ignoring symbolic links and unreadable files. In the case of a directory, a new directory with the
+# same name is made in the destination and then norm_mode_copy() is recursively called on this directory.
+#
+# arg0: Path to source directory to copy from.
+# arg1: Path to destination directory to copy to.
+sub norm_mode_copy
+{
+    my ($src_path, $dst_path) = ($_[0], $_[1]);
+
+    # Append forward slash to paths if left off.
+    $src_path .= '/' if $src_path !~ /\/$/;
+    $dst_path .= '/' if $dst_path !~ /\/$/;
+
+    # Get contents of directory.
+    opendir DIR, $src_path
+        or die "Cannot open directory: $src_path\n";
+    my @dir_contents = File::Spec->no_upwards(readdir DIR);    # Discard '.' and '..' dirs.
+    closedir DIR;
+
+    foreach my $file (@dir_contents)
+    {
+        if    ( -l $src_path.$file) { warn "warning: symbolic link ignored: $file\n";   }   # file is a symlink
+        elsif (!-r $src_path.$file) { warn "warning: unreadable file ignored: $file\n"; }   # file is unreadable
+        elsif ( -f $src_path.$file) { handle_file_type($src_path.$file, $dst_path);     }   # file is normal file
+        else       # file is directory
+        {
+            mkdir $dst_path.$file;
+            my $relative_path = File::Spec->abs2rel($src_path.$file, $main::src_dir);
+
+            # Add restore command for this directory to 'restore.sh'.
+            say RESTORE_SCRIPT  "if [[ ! -d \$DST_DIR/$relative_path ]]; then mkdir \$DST_DIR/$relative_path; fi"
+                or die "$0: Cannot write to file: $main::restore_script\n";
+            # Recursively traverse+copy/compress this directory and its contents.
+            norm_mode_copy($src_path.$file, $dst_path.$file);
+        }
+    }
+}
+
+# Handles file parsing and doing appropriate copy operation depending on file type.
+#
+# arg0: Path to source file.
+# arg1: Path to destination directory which file will be copied to.
+sub handle_file_type
+{
+    my ($file, $dst_path) = ($_[0], $_[1]);
+
+    # index 0: filename, index 1: file directory, index 2: file extension
+    my @file_properties = File::Basename::fileparse($file, @main::special_extensions);
+
+    # Get paths to src and dst file, relative to the src and dst root directories.
+    my $relative_path   = File::Spec->abs2rel($file_properties[1], $main::src_dir);
+    my $compressed_path = File::Spec->abs2rel($dst_path, $main::dst_dir);
+    my $restored_file   = "$relative_path/$file_properties[0]$file_properties[2]";
+    my $compressed_file = "$compressed_path/$file_properties[0]";
+
+    if ($file_properties[2] eq ".wav")          # File is a .wav: Compress to .wv with wavpack.
+    {
+        my $restore_cmd = "wvunpack -y \$SRC_DIR/$compressed_file.wv -o \$DST_DIR/$restored_file 2>/dev/null";
+
+        # Run compression command and handle result of command.
+        `wavpack -y $file -o $dst_path$file_properties[0].wv 2>/dev/null`;
+        handle_compression_errno($?, \@file_properties, $restore_cmd, $dst_path);
+
+    } elsif ($file_properties[2] eq ".ppm")     # File is a .ppm: Compress to png with pnmtopng.
+    {
+        my $restore_cmd = "pngtopnm \$SRC_DIR/$compressed_file.png > \$DST_DIR/$restored_file 2>/dev/null";
+
+        # Run compression command and handle result of command.
+        `pnmtopng $file > $dst_path$file_properties[0].png 2>/dev/null`;
+        handle_compression_errno($?, \@file_properties, $restore_cmd, $dst_path);
+
+    } elsif (exists ${$main::user_extensions}{$file_properties[2]})     # File type is defined in user config.
+    {
+        # Get compression and restore commands from the user defined hash.
+        my $compression_cmd = ${$main::user_extensions}{$file_properties[2]}[0];
+        my $restore_cmd = ${$main::user_extensions}{$file_properties[2]}[1];
+
+        # Substitute special literals in user specified backup and restore commands.
+        $compression_cmd    =~ s/RELATIVE_PATH/$relative_path/g;
+        $restore_cmd        =~ s/RELATIVE_PATH/$relative_path/g;
+        $compression_cmd    =~ s/BACKUP_DEST_ROOT/$main::dst_dir/g;
+        $restore_cmd        =~ s|BACKUP_DEST_ROOT|"\$SRC_DIR/"|g;
+        $compression_cmd    =~ s/BASENAME/$file_properties[0]/g;
+        $restore_cmd        =~ s/BASENAME/$file_properties[0]/g;
+
+        # Run compression command and handle result of command.
+        `$compression_cmd`;
+        handle_compression_errno($?, \@file_properties, $restore_cmd, $dst_path);
+    } else          # File type is not defined anywhere, so do standard copy without any compression.
+    {
+        File::Copy::copy($file, $dst_path);
+        say RESTORE_SCRIPT  "cp \$SRC_DIR/$relative_path/$file_properties[0]$file_properties[2] \$DST_DIR/$relative_path"
+            or die "$0: Cannot write to file: $main::restore_script\n";
+    }
+}
+
+# Handles what to do after compression command is run on compressable file depending on the command's return value.
+# If compression was successful, adds specified decompression command to 'restore.sh' and append the '.smrtbak' extension.
+# If compression was unsuccessful, warns the user and does a standard uncompressed copy of the file.
+#
+# arg0: Errno returned from compression utility ($?).
+# arg1: Reference to file properties array (name, path, extension).
+# arg2: Shell command to decompress file.
+# arg3: Path to destination directory.
+sub handle_compression_errno
+{
+    my ($errno, $file_properties, $restore_cmd, $dst_path) = ($_[0], $_[1], $_[2], $_[3]);
+
+    if ($errno == 0)    # Compression completed successfully.
+    {
+        # Add decompression command for this file to 'restore.sh'.
+        say RESTORE_SCRIPT "$restore_cmd"
+            or die "$0: Cannot write to file: $main::restore_script\n";
+
+        # Append special '.smrtbak' extension onto compressed file so we can identify it in differential backups.
+        my @file_name = glob("$dst_path$$file_properties[0]*");
+        rename $file_name[0], $file_name[0].'.smrtbak';
+    } else          # Compression did not work, copy file without compression.
+    {
+        warn "warning: file could not be compressed: $$file_properties[1]$$file_properties[0]$$file_properties[2]\n";
+        File::Copy::copy($$file_properties[1].$$file_properties[0].$$file_properties[2], $dst_path);
+
+        my $relative_path = File::Spec->abs2rel($$file_properties[1], $main::src_dir);
+        # Add restore command for this file to 'restore.sh'.
+        say RESTORE_SCRIPT  "cp \$SRC_DIR/$relative_path/$$file_properties[0]$$file_properties[2] \$DST_DIR/$relative_path"
+            or die "$0: Cannot write to file: $main::restore_script\n";
+    }
+}
+
+# Creates 'restore.sh', writes header, first parts of logic and makes it executable.
+sub init_restore_script
+{
+    open RESTORE_SCRIPT, ">", $main::restore_script
+        or die "$0: Cannot create file: $main::restore_script\n";
+
+    say RESTORE_SCRIPT      "#!/bin/bash\n",
+                            "#Script to restore archive:\n",
+                            "#Run with no args to restore to original location.\n",
+                            "#Run with single arg to restore to specified location.\n\n",
+                            "SRC_DIR=$main::dst_dir\n",
+                            "if [[ \$# -gt 0 ]]; then DST_DIR=\$(readlink -f \$1); else DST_DIR=$main::src_dir; fi\n",
+                            "\n#Some pretty basic argument path checking\n",
+                            "if [[ \$DST_DIR == \$SRC_DIR ]]; then\n",
+                            "\techo \"\$0: Restore path cannot be same as backup path.\" 1>&2;\n",
+                            "\texit 1;\n",
+                            "elif [[ ! -w \$(dirname \$DST_DIR) ]]; then\n",
+                            "\techo \"\$0: Cannot access \$DST_DIR: Insufficient permissions.\" 1>&2;\n",
+                            "\texit 1;\n",
+                            "fi\n",
+                            "if [[ ! -d \$DST_DIR ]]; then mkdir -p \$DST_DIR; fi\n",
+                            "#Get rid of the '.smrtbak' extensions on compressed files.\n",
+                            "rename 's/\.smrtbak\$//' \$(find \$SRC_DIR -name \"*\")\n\n",
+                            "# # # Start of generated content # # #"
+        or die "$0: Cannot write to file: $main::restore_script\n";
+
+    chmod 0755, $main::restore_script;  # Make 'restore.sh' executable.
+}
+
+# Writes final part of 'restore.sh' after all the generated restoring commands. Sends a message to users running the
+# script and also removes the backup archive folder.
+# Finally, the file handle to 'restore.sh' is closed.
+sub finalise_restore_script
+{
+    say RESTORE_SCRIPT      "# # # End of generated content # # #\n\n",
+                            "echo \"Restore to '\$DST_DIR' complete.\"\n",
+                            "rm -rf \$SRC_DIR   # remove backup after restoring"
+        or die "$0: Cannot write to file: $main::restore_script\n";
+
+    close RESTORE_SCRIPT        # Finally close 'restore.sh'.
+        or die "$0: Cannot close file: $main::restore_script\n";
+}
+
+# Evaluates user config '.smart-backup' assumed to contain hash as specified in smart-backup docs.
+#
+# arg0: Path to config file (allows user specified config in future release).
+# returns: Reference to %user_extensions.
+sub eval_config
+{
+    my $config_path = $_[0];
+    my %user_extensions;
+
+    open CONFIG, $config_path
+        or die "$0: Cannot open config file: $config_path\n";
+    my @extensions = <CONFIG>;
+    close CONFIG
+        or die "$0: Cannot close config file: $config_path\n";
+
+    eval "@extensions";
+    die "$0: Cannot evaluate config entries (syntax error?):\n$@\n" if $@;
+
+    # Replace literals in the commands with specified directories (only the ones possible at this stage).
+    while (($_, my $value) = each %user_extensions)
+    {
+        foreach my $cmd (@{$value})
+        {
+            $cmd =~ s/BACKUP_SRC_ROOT/$main::src_dir/g;
+            $cmd =~ s|RESTORE_DEST_ROOT|"\$DST_DIR/"|g;      # Specified in 'restore.sh'.
+        }
+    }
+    return \%user_extensions;   # Return reference to hash.
+}
