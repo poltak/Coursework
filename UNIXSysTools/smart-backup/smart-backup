@@ -76,10 +76,6 @@ say "Backup to '$main::dst_dir' complete.";
 
 # Traverses through the directories doing a differential backup, copying on those files that have been modified since
 # the last backup (path in arg2). Based-off logic originally written for Stage 1 (still in norm_mode_copy() sub).
-
-# As per Robert's post on moodle, it ignores compressed files (each have '.smrtbak' extension appended, so we can easily
-# find out which have been compressed) and only works for uncompressed files:
-# http://moodle.vle.monash.edu/mod/forum/discuss.php?d=243005
 #
 # arg0: Path to source directory to copy from.
 # arg1: Path to destination directory to copy to.
