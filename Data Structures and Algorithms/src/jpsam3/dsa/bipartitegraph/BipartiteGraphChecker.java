@@ -1,10 +1,9 @@
-package jpsam3.dsa.bipartitegraph; /*
-  *  FIT2004 Prac 5, Question 2
-  *  Name:           Jonathan Poltak Samosir
-  *  Email:          jpsam3@student.monash.edu
-  *  Student ID:     2271 3603
-  *  Date:           2012-10-15
-  */
+package jpsam3.dsa.bipartitegraph;
+/*
+ *  Name:           Jonathan Poltak Samosir
+ *  Email:          jpsam3@student.monash.edu
+ *  Date:           2012-10-15
+ */
 
 import java.io.BufferedReader;
 import java.io.FileReader;
