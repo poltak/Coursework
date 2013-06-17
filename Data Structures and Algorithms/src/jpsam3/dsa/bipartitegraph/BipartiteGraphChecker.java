@@ -13,70 +13,66 @@ import java.util.TreeSet;
 
 public class BipartiteGraphChecker
 {
-	private TreeMap<String,Vertex> adjList;
+    private enum Colour {RED, BLUE}
 
-	public BipartiteGraphChecker()
-	{
-		adjList = new TreeMap<String,Vertex>();
-	}
+	private final TreeMap<String,Vertex> adjList;
 
-	/*
-	 * Reads the given file and sends each line to be handled by handleLine()
-	 */
-	public void readFile(String filePath)
-	{
-		String line;
-		BufferedReader in;
+    public BipartiteGraphChecker() { adjList = new TreeMap<>(); }
 
+    /**
+     * Reads the given file and sends each line to be handled by handleLine()
+     * @param filePath Path to file containing data.
+     */
+	public void handleFile(String filePath) throws RuntimeException
+    {
 		try {
-			in = new BufferedReader(new FileReader(filePath));
+			BufferedReader in = new BufferedReader(new FileReader(filePath));
 
-			while ((line = in.readLine()) != null)			// read all lines in file
+            String line;
+			while ((line = in.readLine()) != null)	// Extract data from each line.
 				handleLine(line);
 
 			in.close();
 		} catch (IOException e) {
-			System.err.printf("Fatal IO error occured.");
+			System.err.printf("Fatal IO error occurred.");
+            e.printStackTrace();
+            throw new RuntimeException();
 		}
 	}
 
-	/*
-	 * Handles readLine by inserting Vertex and specified friends into adjList if not already there.
-	 * ***ASSUMES proper formatting (as in prac specifications PDF)***
-	 */
+    /**
+     * Handles readLine by inserting Vertex and specified friends into adjList if not already there.
+     * @param readLine Line to be handled as String.
+     */
 	private void handleLine(String readLine)
 	{
-		String[] vertices;
-		Vertex vertexA, vertexB;
+		String[] vertices = readLine.split(" ");
 
-		vertices = readLine.split(" ");
-
-		for (String vertex : vertices)					// for each vertex, it adds it as a new vertex in the Graph (if not already existing)
+		for (String vertex : vertices)				// For each Vertex, add to adjList if not already there.
 			if (!adjList.containsKey(vertex))
 				addNewVertex(vertex);
 
-		vertexA = adjList.get(vertices[0]);
-		vertexB = adjList.get(vertices[1]);
+		Vertex vertexA = adjList.get(vertices[0]);
+		Vertex vertexB = adjList.get(vertices[1]);
 
-		if (!vertexA.alreadyNeighbours(vertexB))		// adds new edge to given name's friend list if not already there
+		if (!vertexA.alreadyNeighbours(vertexB))	// Adds new edge to given name's friend list if not already there.
 			vertexA.addNewNeighbour(vertexB);
 
-		if (!vertexB.alreadyNeighbours(vertexA))		// same as above, but for second name in line
+		if (!vertexB.alreadyNeighbours(vertexA))	// Same as above, but for second name in line.
 			vertexB.addNewNeighbour(vertexA);
 	}
 
-	/*
-	 * Simple method to add a new vertex to our adjacency list.
-	 */
+    /**
+     * Simple method to add a new vertex to our adjacency list.
+     * @param key Key found in data file.
+     */
 	private void addNewVertex(String key)
 	{
-		Vertex toAdd;
-
-		toAdd = new Vertex(key);
+		Vertex toAdd = new Vertex(key);
 		adjList.put(key, toAdd);
 	}
 
-	/*
+	/**
 	 * Prints out the information contained in the Graph in a human-readable format.
 	 * For each vertex in the adjacency list, prints out the vertex followed by its adjacent vertices.
 	 ***Assuming that something is put into the TreeMap first.***
@@ -84,88 +80,66 @@ public class BipartiteGraphChecker
 	 */
 	public void printGraph()
 	{
-		Vertex currentVertex;
-		TreeSet<Vertex> currentFriendSet;
-		String currentString;
-
-		System.out.printf("Adjacency list representation:\n");
-		currentString = adjList.firstKey();
+		System.out.printf("Adjacency list representation:%n");
+		String currentString = adjList.firstKey();
 		do
 		{
-			currentVertex = adjList.get(currentString);
+			Vertex currentVertex = adjList.get(currentString);
 			System.out.printf("%s -->", currentVertex.name);
 
-			currentFriendSet = currentVertex.neighbours;
+			TreeSet<Vertex> currentFriendSet = currentVertex.neighbours;
 			for (Vertex friend : currentFriendSet)
-				System.out.printf("   %s", friend.name);
-			System.out.printf("\n");
-		}
-		while ((currentString = adjList.higherKey(currentString)) != null);
+            	System.out.printf("   %s", friend.name);
+
+			System.out.printf("%n");
+		} while ((currentString = adjList.higherKey(currentString)) != null);
 	}
 
-	/*
-	 * Returns the next Vertex in adjList with visited = false. If none, returns null.
-	 */
+    /**
+     * Finds and returns the next Vertex in adjList with visited == false. If none, returns null.
+     * @return Next unvisited Vertex object or null if all visited.
+     */
 	private Vertex nextNotVisited()
 	{
-		Vertex currentVertex;
-		String currentString;
-
-		currentString = adjList.firstKey();
+		String currentString = adjList.firstKey();
 		do
 		{
-			currentVertex = adjList.get(currentString);
-
+			Vertex currentVertex = adjList.get(currentString);
 			if (!currentVertex.visited)
-				return currentVertex;
-		}
-		while ((currentString = adjList.higherKey(currentString)) != null);
+                return currentVertex;
+		} while ((currentString = adjList.higherKey(currentString)) != null);
 
-		return null;			// null if there is none
+		return null;			// Return null if all visited.
 	}
 
-	/*
-	 * all Vertices in adjList TreeMap are visited ? true : false
-	 * Uses nextNotVisited() to determine if any Vertex is not visited as it returns null if all visited.
-	 */
-	private boolean allVisited()
-	{
-		if (nextNotVisited() == null)
-			return true;
-		return false;
-	}
+    /**
+     * Uses nextNotVisited() to determine if any Vertex is not visited as it returns null if all visited.
+     * @return Boolean value denoting whether or not all Vertices in graph have been visited.
+     */
+	private boolean allVisited() { return nextNotVisited() == null; }
 
-	/*
+	/**
 	 * Resets all Vertices in adjList to default state of visited = false.
 	 */
 	private void resetVisited()
 	{
-		Vertex currentVertex;
-		String currentString;
-
-		currentString = adjList.firstKey();
+		String currentString = adjList.firstKey();
 		do
-		{
-			currentVertex = adjList.get(currentString);
-			currentVertex.visited = false;
-		}
+            adjList.get(currentString).visited = false;
 		while ((currentString = adjList.higherKey(currentString)) != null);
 	}
 
-	/*
+	/**
 	 * Detects whether or not graph is bipartite. Graph does not have to be all connected.
 	 */
 	public void bipartiteDetect()
 	{
-		Vertex v;
-		boolean isBipartite;
-
-		isBipartite = true;
+		boolean isBipartite = true;
 		resetVisited();
 
-		while (!allVisited())
+		while (allVisited())
 		{
-			v = nextNotVisited();
+			Vertex v = nextNotVisited();
 			v.colour = Colour.BLUE;
 
 			if (!DFS(v))
@@ -175,112 +149,96 @@ public class BipartiteGraphChecker
 			}
 		}
 
-		if (isBipartite)
-			System.out.printf("Graph is bipartite.\n");
-		else
-			System.out.printf("Graph is _not_ bipartite.\n");
+		if (isBipartite)	System.out.printf("Graph is bipartite.%n");
+		else                System.out.printf("Graph is _not_ bipartite.%n");
 	}
 
-	/*
-	 * Just a slightly modified DFS on the graph to making it two coloured and at the same time checking colours of neighbour Vertices.
-	 * Returns false whenever any violation of bipartite rules are broken.
-	 * Returns true if no bipartite rules get broken.
-	 */
+    /**
+     * A slightly modified DFS algorithm on the graph to making it two-coloured and at the same time checking colours of
+     * neighbouring Vertices.
+     * @param v Vertex to perform DFS on.
+     * @return Boolean value denoting whether or not the bipartite graph rules have been violated.
+     */
 	private boolean DFS(Vertex v)
 	{
-		TreeSet<Vertex> neighbourSet;
-
-		v.visited = true;
-		neighbourSet = v.neighbours;
+		TreeSet<Vertex> neighbourSet = v.neighbours;
+        v.visited = true;
 
 		for (Vertex neighbour : neighbourSet)
 		{
 			if (!neighbour.visited)
 			{
-				neighbour.colour = v.nextColour();	/* colour current neighbour with other colour to v */
-				if (DFS(neighbour))
-					continue; 						/* continue to next Vertex in neighbourSet if everything is good for current */
-				else
-					return false;
-			} else if (neighbour.colour.equals(v.colour))		/* colour is the same to adjacent Vertex */
+				neighbour.colour = v.nextColour();	        // Colour current neighbour with different colour to v.
+				if (!DFS(neighbour))    return false;
+			} else if (neighbour.colour.equals(v.colour))	// If colour is the same as adjacent Vertex.
+            {
 				return false;
+            }
 		}
-		return true;			/* only reaches here if for each neighbour of v, they don't violate bipartite rules */
+		return true;	// Only reaches here if for each neighbour of v, they don't violate bipartite rules.
 	}
 
 
 
+    /* Some tests */
 	public static void main(String[] args)
 	{
-		BipartiteGraphChecker testG;
-
-		testG = new BipartiteGraphChecker();
-		testG.readFile("edges.txt");
+		BipartiteGraphChecker testG = new BipartiteGraphChecker();
+		testG.handleFile("src/jpsam3/dsa/bipartitegraph/edges.txt");
 		testG.printGraph();
-		System.out.printf("\n");
+		System.out.printf("%n");
 		testG.bipartiteDetect();
 	}
 
-	public enum Colour {RED, BLUE};
-
-	/*
-	 * Used for creating Vertex objects. They each have a name and visited attributes.
-	 * They also contain a TreeSet of Vertices called neighbours which essentially provides an adjacency list implementation for Graphs
-	 * as the Graph object will be made as a TreeMap which maps Strings to Vertices (each Vertex containing a TreeSet of friend Vertices).
+	/**
+	 * Used for creating Vertex objects. They each have a name and 'visited' attributes.
+	 * They also contain a TreeSet of Vertices called neighbours which essentially provides an adjacency list
+     * implementation for Graphs as the Graph object will be made as a TreeMap which maps Strings to Vertices
+     * (each Vertex containing a TreeSet of friend Vertices).
 	 */
-	public class Vertex implements Comparable<Vertex>
+	private static class Vertex implements Comparable<Vertex>
 	{
-		public TreeSet<Vertex> neighbours;			// adjacency list for friends
-		public String name;
-		public boolean visited;
-		public Colour colour;
+		private TreeSet<Vertex> neighbours;		// Adjacency list for friends.
+		private final String    name;
+        private Colour          colour;
+		private boolean         visited;
 
-		public Vertex(String initName)
+		private Vertex(String initName)
 		{
-			name = initName;
-			visited = false;
-			neighbours = new TreeSet<Vertex>();
+            neighbours = new TreeSet<>();
+			name       = initName;
+			visited    = false;
 		}
 
-		/*
-		 * Checks if this Vertex is already friends with friend Vertex.
-		 */
-		public boolean alreadyNeighbours(Vertex neighbour)
-		{
-			if (neighbours.contains(neighbour))
-				return true;
-			return false;
-		}
+        /**
+         * Checks if this Vertex is already friends with neighbour Vertex.
+         * @param neighbour Neighbouring Vertex to check friendship status against.
+         * @return Boolean value denoting whether or not this Vertex is friends with neighbour Vertex.
+         */
+		private boolean alreadyNeighbours(Vertex neighbour) { return neighbours.contains(neighbour); }
 
-		/*
-		 * Really simple method. Used for making the handleLine() code clearer.
-		 */
-		public void addNewNeighbour(Vertex newNeighbour)
-		{
-			neighbours.add(newNeighbour);
-		}
+        /**
+         * Really simple method used for making the handleLine() code clearer and more reader-friendly.
+         * @param newNeighbour Vertex to add to this.neighbours.
+         */
+		private void addNewNeighbour(Vertex newNeighbour) { neighbours.add(newNeighbour); }
 
-		/*
-		 * Returns the next alternating Colour.
-		 */
-		public Colour nextColour()
+        /**
+         * @return Next colour from this.colour.
+         */
+		private Colour nextColour()
 		{
 			if (this.colour == Colour.RED)
 				return Colour.BLUE;
 			return Colour.RED;
 		}
 
-		/*
-		 * Allows Vertex objects to be compared by their name (mainly used for ordering in TreeMap/TreeSets).
-		 */
-		@Override
-		public int compareTo(Vertex o)
-		{
-			int nameCompVal;
-
-			nameCompVal = this.name.compareTo(o.name);
-			return nameCompVal;
-		}
-
+        /**
+         * Allows Vertex objects to be compared by their name (mainly used for ordering in TreeMap/TreeSets).
+         * @param o Vertex to compare this to.
+         * @return Integer value following the standard Java compareTo() return values.
+         */
+        @Override
+		public int compareTo(Vertex o) { return this.name.compareTo(o.name); }
 	}
 }
